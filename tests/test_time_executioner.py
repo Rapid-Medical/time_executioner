@@ -10,35 +10,51 @@ from time_executioner.time_executioner import TimeExecutioner
 
 # Test classes and functions
 class TestClass:
-    @TimeExecutioner.run
+    @TimeExecutioner.log
     def sync_method(self, x: int) -> int:
         time.sleep(0.1)
         return x * 2
 
-    @TimeExecutioner.run
+    @TimeExecutioner.log
     async def async_method(self, x: int) -> int:
         await asyncio.sleep(0.1)
         return x * 2
 
-    @TimeExecutioner.run
+    @TimeExecutioner.log(log_level="debug")
+    def sync_method_log_level(self, x: int) -> int:
+        time.sleep(0.1)
+        return x * 2
+
+    @TimeExecutioner.log()
+    def sync_method_log_level_no_args(self, x: int) -> int:
+        time.sleep(0.1)
+        return x * 2
+
+    @TimeExecutioner.log
     def error_method(self) -> None:
         raise ValueError("Test error")
 
-    @TimeExecutioner.run
+    @TimeExecutioner.log
     async def async_error_method(self) -> None:
         await asyncio.sleep(0.1)
         raise ValueError("Test async error")
 
 
-@TimeExecutioner.run
+@TimeExecutioner.log
 def standalone_sync_function(x: int) -> int:
     time.sleep(0.1)
     return x * 2
 
 
-@TimeExecutioner.run
+@TimeExecutioner.log
 async def standalone_async_function(x: int) -> int:
     await asyncio.sleep(0.1)
+    return x * 2
+
+
+@TimeExecutioner.log(log_level="warning")
+def standalone_sync_function_with_log_level(x: int) -> int:
+    time.sleep(0.1)
     return x * 2
 
 
@@ -51,39 +67,59 @@ def mock_logger():
 
 @pytest.mark.asyncio
 class TestTimeExecution:
-    async def test_sync_method(self, mock_logger) -> None:
+    def test_sync_method(self, mock_logger) -> None:
         test_instance = TestClass()
         result = test_instance.sync_method(5)
 
         assert result == 10
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args
-        assert "TestClass.sync_method() executed in" in call_args[0][0]
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert call_args[0][0] == "info"
+        assert "TestClass.sync_method() executed in" in call_args[0][1]
         assert call_args[1]["extra"]["function_name"] == "sync_method"
         assert call_args[1]["extra"]["class_name"] == "TestClass"
         assert not call_args[1]["extra"]["is_async"]
         assert isinstance(call_args[1]["extra"]["execution_time"], float)
 
-    async def test_async_method(self, mock_logger):
+    async def test_async_method(self, mock_logger) -> None:
         test_instance = TestClass()
         result = await test_instance.async_method(5)
 
         assert result == 10
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args
-        assert "TestClass.async_method() executed in" in call_args[0][0]
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert "TestClass.async_method() executed in" in call_args[0][1]
         assert call_args[1]["extra"]["function_name"] == "async_method"
         assert call_args[1]["extra"]["class_name"] == "TestClass"
         assert call_args[1]["extra"]["is_async"]
         assert isinstance(call_args[1]["extra"]["execution_time"], float)
 
+    def test_log_level_specified(self, mock_logger) -> None:
+        test_instance = TestClass()
+        result = test_instance.sync_method_log_level(5)
+
+        assert result == 10
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert call_args[0][0] == "debug"
+        assert "TestClass.sync_method_log_level() executed in" in call_args[0][1]
+
+    def test_log_level_specified_no_args(self, mock_logger) -> None:
+        test_instance = TestClass()
+        result = test_instance.sync_method_log_level_no_args(5)
+
+        assert result == 10
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert call_args[0][0] == "info"
+
     def test_standalone_sync_function(self, mock_logger):
         result = standalone_sync_function(5)
 
         assert result == 10
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args
-        assert ".standalone_sync_function() executed in" in call_args[0][0]
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert ".standalone_sync_function() executed in" in call_args[0][1]
         assert call_args[1]["extra"]["function_name"] == "standalone_sync_function"
         assert call_args[1]["extra"]["class_name"] == "int"
         assert not call_args[1]["extra"]["is_async"]
@@ -93,12 +129,19 @@ class TestTimeExecution:
         result = await standalone_async_function(5)
 
         assert result == 10
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args
-        assert ".standalone_async_function() executed in" in call_args[0][0]
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert ".standalone_async_function() executed in" in call_args[0][1]
         assert call_args[1]["extra"]["function_name"] == "standalone_async_function"
         assert call_args[1]["extra"]["class_name"] == "int"
         assert call_args[1]["extra"]["is_async"]
+
+    def test_log_level_specified_standalone(self, mock_logger) -> None:
+        result = standalone_sync_function_with_log_level(5)
+        assert result == 10
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert call_args[0][0] == "warning"
 
     def test_sync_error_handling(self, mock_logger):
         test_instance = TestClass()
@@ -130,7 +173,7 @@ class TestTimeExecution:
         test_instance.sync_method(5)
         end = time.time()
 
-        call_args = mock_logger.info.call_args
+        call_args = mock_logger.log.call_args
         measured_time = call_args[1]["extra"]["execution_time"]
         assert measured_time <= (end - start)
         assert measured_time >= 0.1  # Since we sleep for 0.1 seconds
