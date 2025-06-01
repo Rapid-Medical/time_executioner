@@ -5,7 +5,7 @@ A simple common decorator library for timing and logging function calls in pytho
 ## Example Code
 
 ```python
-from time_executioner import TimeExecutioner
+from src import TimeExecutioner
 
 
 @TimeExecutioner.log
