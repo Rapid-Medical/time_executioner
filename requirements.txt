@@ -1,0 +1,4 @@
+pytest
+pytest-asyncio #==0.21.1 # plugin for running asyncio-based tests in Pytest
+pytest-cov #==4.1.0 # Pytest plugin for measuring code coverage
+setuptools==78.1.1
