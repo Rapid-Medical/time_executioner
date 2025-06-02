@@ -38,8 +38,8 @@ class TimeExecutioner:
     def log(f_py: Any = None, log_level: str = "info"):
         """
         the outer decorator function for time executioner logging. Because of how decorators
-        work, in python, we need to nest the outer decorator inside that takes arguments around
-        the core inner decorator. (See: https://stackoverflow.com/a/60832711)
+        work, in python, we need to nest the core decorator function inside another decorator
+        that takes arguments. (See: https://stackoverflow.com/a/60832711)
 
         Parameters:
             f_py (Callable): function to be decorated, or None.
@@ -65,7 +65,10 @@ class TimeExecutioner:
             """
 
             def _log_execution(
-                start_time: float, func_name: str, class_name: str, error: Exception | None = None
+                start_time: float,
+                func_name: str,
+                class_name: str,
+                error: Exception | None = None,
             ) -> None:
                 """
                 Helper function to handle logging logic
@@ -74,7 +77,8 @@ class TimeExecutioner:
                 te = TimeExecutioner()
 
                 # when calling logger.log, you're expected to pass in an int level.
-                # however the inbuilt logging.getLevelName() is a mess.
+                # however the inbuilt logging.getLevelName() is a mess. this
+                # names mapping method is only available in newer versions of python.
                 int_level = logging.getLevelNamesMapping()[log_level.upper()]
 
                 if error is None:

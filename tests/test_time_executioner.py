@@ -68,7 +68,7 @@ def mock_logger():
 class CustomLogger(logging.Logger):
     log_was_called = False
 
-    def log(self, level, msg, *args, **kwargs):
+    def log(self, level, msg, *args, **kwargs) -> None:
         self.log_was_called = True
 
 
@@ -120,7 +120,7 @@ class TestTimeExecution:
         call_args = mock_logger.log.call_args
         assert call_args[0][0] == logging.INFO
 
-    def test_standalone_sync_function(self, mock_logger: MagicMock):
+    def test_standalone_sync_function(self, mock_logger: MagicMock) -> None:
         result = standalone_sync_function(5)
 
         assert result == 10
@@ -132,8 +132,7 @@ class TestTimeExecution:
         assert not call_args[1]["extra"]["is_async"]
 
     @pytest.mark.asyncio
-    async def test_standalone_async_function(self, mock_logger: MagicMock):
-        """Test standalone asynchronous function execution and logging"""
+    async def test_standalone_async_function(self, mock_logger: MagicMock) -> None:
         result = await standalone_async_function(5)
 
         assert result == 10
@@ -151,7 +150,7 @@ class TestTimeExecution:
         call_args = mock_logger.log.call_args
         assert call_args[0][0] == logging.WARNING
 
-    def test_sync_error_handling(self, mock_logger: MagicMock):
+    def test_sync_error_handling(self, mock_logger: MagicMock) -> None:
         test_instance = TestClass()
 
         with pytest.raises(ValueError, match="Test error"):
@@ -164,7 +163,7 @@ class TestTimeExecution:
         assert not call_args[1]["extra"]["is_async"]
 
     @pytest.mark.asyncio
-    async def test_async_error_handling(self, mock_logger: MagicMock):
+    async def test_async_error_handling(self, mock_logger: MagicMock) -> None:
         test_instance = TestClass()
 
         with pytest.raises(ValueError, match="Test async error"):
@@ -176,7 +175,7 @@ class TestTimeExecution:
         assert call_args[1]["extra"]["error"] == "Test async error"
         assert call_args[1]["extra"]["is_async"]
 
-    def test_execution_time_measurement(self, mock_logger: MagicMock):
+    def test_execution_time_measurement(self, mock_logger: MagicMock) -> None:
         test_instance = TestClass()
         start = time.time()
         test_instance.sync_method(5)
