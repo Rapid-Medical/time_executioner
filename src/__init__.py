@@ -5,7 +5,7 @@ Time Executioner - A decorator for measuring execution time of functions
 
 def __version__():
     """Return the version of the simple_stats package."""
-    return "0.0.1"
+    return "0.0.2"
 
 
 def describe():
