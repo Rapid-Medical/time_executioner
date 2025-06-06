@@ -23,12 +23,12 @@ class TestClass:
     @TimeExecutioner.log(log_level="debug")
     def sync_method_log_level(self, x: int) -> int:
         time.sleep(0.1)
-        return x * 2
+        return x * 3
 
     @TimeExecutioner.log()
     def sync_method_log_level_no_args(self, x: int) -> int:
         time.sleep(0.1)
-        return x * 2
+        return x * 4
 
     @TimeExecutioner.log
     def error_method(self) -> None:
@@ -72,7 +72,7 @@ class CustomLogger(logging.Logger):
         self.log_was_called = True
 
 
-class TestTimeExecution:
+class TestTimeExecutionDecorator:
     def test_sync_method(self, mock_logger: MagicMock) -> None:
         test_instance = TestClass()
         result = test_instance.sync_method(5)
@@ -81,8 +81,8 @@ class TestTimeExecution:
         mock_logger.log.assert_called_once()
         call_args = mock_logger.log.call_args
         assert call_args[0][0] == logging.INFO
-        assert "TestClass.sync_method() executed in" in call_args[0][1]
-        assert call_args[1]["extra"]["function_name"] == "sync_method"
+        assert "TestClass.sync_method(): executed in" in call_args[0][1]
+        assert call_args[1]["extra"]["function_name"] == "sync_method()"
         assert call_args[1]["extra"]["class_name"] == "TestClass"
         assert not call_args[1]["extra"]["is_async"]
         assert isinstance(call_args[1]["extra"]["execution_time"], float)
@@ -95,8 +95,8 @@ class TestTimeExecution:
         assert result == 10
         mock_logger.log.assert_called_once()
         call_args = mock_logger.log.call_args
-        assert "TestClass.async_method() executed in" in call_args[0][1]
-        assert call_args[1]["extra"]["function_name"] == "async_method"
+        assert "TestClass.async_method(): executed in" in call_args[0][1]
+        assert call_args[1]["extra"]["function_name"] == "async_method()"
         assert call_args[1]["extra"]["class_name"] == "TestClass"
         assert call_args[1]["extra"]["is_async"]
         assert isinstance(call_args[1]["extra"]["execution_time"], float)
@@ -105,17 +105,17 @@ class TestTimeExecution:
         test_instance = TestClass()
         result = test_instance.sync_method_log_level(5)
 
-        assert result == 10
+        assert result == 15
         mock_logger.log.assert_called_once()
         call_args = mock_logger.log.call_args
         assert call_args[0][0] == logging.DEBUG
-        assert "TestClass.sync_method_log_level() executed in" in call_args[0][1]
+        assert "TestClass.sync_method_log_level(): executed in" in call_args[0][1]
 
     def test_log_level_specified_no_args(self, mock_logger: MagicMock) -> None:
         test_instance = TestClass()
         result = test_instance.sync_method_log_level_no_args(5)
 
-        assert result == 10
+        assert result == 20
         mock_logger.log.assert_called_once()
         call_args = mock_logger.log.call_args
         assert call_args[0][0] == logging.INFO
@@ -126,8 +126,8 @@ class TestTimeExecution:
         assert result == 10
         mock_logger.log.assert_called_once()
         call_args = mock_logger.log.call_args
-        assert ".standalone_sync_function() executed in" in call_args[0][1]
-        assert call_args[1]["extra"]["function_name"] == "standalone_sync_function"
+        assert ".standalone_sync_function(): executed in" in call_args[0][1]
+        assert call_args[1]["extra"]["function_name"] == "standalone_sync_function()"
         assert call_args[1]["extra"]["class_name"] == "int"
         assert not call_args[1]["extra"]["is_async"]
 
@@ -138,8 +138,8 @@ class TestTimeExecution:
         assert result == 10
         mock_logger.log.assert_called_once()
         call_args = mock_logger.log.call_args
-        assert ".standalone_async_function() executed in" in call_args[0][1]
-        assert call_args[1]["extra"]["function_name"] == "standalone_async_function"
+        assert ".standalone_async_function(): executed in" in call_args[0][1]
+        assert call_args[1]["extra"]["function_name"] == "standalone_async_function()"
         assert call_args[1]["extra"]["class_name"] == "int"
         assert call_args[1]["extra"]["is_async"]
 
@@ -198,3 +198,30 @@ class TestTimeExecution:
         test_instance = TestClass()
         _ = test_instance.sync_method(5)
         assert custom_logger.log_was_called is True
+
+
+class TestTimeExecuteContextManager:
+    def test_time_execute_context_manager(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.time("test_label"):
+            time.sleep(0.1)
+
+        mock_logger.log.assert_called_once()
+        call_args = mock_logger.log.call_args
+        assert call_args[0][0] == logging.INFO
+        assert "time_execute.test_label: executed in" in call_args[0][1]
+        assert call_args[1]["extra"]["function_name"] == "test_label"
+        assert call_args[1]["extra"]["class_name"] == "time_execute"
+        assert not call_args[1]["extra"]["is_async"]
+        assert isinstance(call_args[1]["extra"]["execution_time"], float)
+
+    def test_time_execute_context_manager_with_log_level(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.time("test_label", log_level="warning"):
+            time.sleep(0.1)
+
+        assert mock_logger.log.call_args[0][0] == logging.WARNING
+
+    def test_including_extra_data(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.time("test_label", extra={"extra_key": "extra_value"}):
+            time.sleep(0.1)
+
+        assert mock_logger.log.call_args[1]["extra"]["extra_key"] == "extra_value"
