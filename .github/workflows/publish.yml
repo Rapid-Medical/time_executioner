@@ -27,7 +27,7 @@ jobs:
         python-version: "3.11"
     - name: Build sdist and wheel
       run: |
-        python -m pip install --upgrade pip build twine
+        python -m pip install --upgrade pip 'build==1.2.2.post1' 'twine==6.1.0'
         python -m build
     - name: Check distribution metadata
       run: twine check dist/*
@@ -63,4 +63,6 @@ jobs:
       with:
         name: dist
         path: dist/
-    - uses: pypa/gh-action-pypi-publish@release/v1
+    # pinned to a commit SHA: `release/v1` is a mutable branch ref, and this
+    # step holds PyPI publishing rights via OIDC
+    - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
