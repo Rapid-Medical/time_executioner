@@ -1,5 +1,6 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# Install dependencies, lint, test across supported Python versions, and verify
+# that the built distribution is actually installable and importable.
+# https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
 name: Python package
 
@@ -10,28 +11,27 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        # Must track requires-python in pyproject.toml
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        python -m pip install flake8
         # install the package itself so tests import the real artifact,
         # not the working-tree source layout
-        python -m pip install -e .
+        python -m pip install -e '.[dev]'
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -39,5 +39,74 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
+      run: pytest
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: Run pre-commit (black, isort, flake8, bandit, mypy)
+      uses: pre-commit/action@v3.0.1
+
+  build:
+    # Guards the packaging bugs that a source-tree test run cannot see:
+    # stray top-level files, a missing py.typed, or a version that
+    # silently resolves to 0.0.0.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: Build sdist and wheel
       run: |
-        pytest
+        python -m pip install --upgrade pip build twine
+        python -m build
+    - name: Check distribution metadata
+      run: twine check dist/*
+    - name: Verify wheel contents
+      run: |
+        set -euo pipefail
+        echo "--- wheel contents ---"
+        python -m zipfile --list dist/*.whl
+        # every file must live under the package dir or its .dist-info;
+        # a bare top-level file would pollute site-packages
+        stray=$(python -m zipfile --list dist/*.whl \
+          | awk 'NR>1 {print $1}' \
+          | grep -Ev '^(time_executioner/|time_executioner-.*\.dist-info/)' \
+          | grep -E '\S' || true)
+        if [ -n "$stray" ]; then
+          echo "ERROR: wheel contains files outside the package:"
+          echo "$stray"
+          exit 1
+        fi
+        python -m zipfile --list dist/*.whl | grep -q 'time_executioner/py.typed' \
+          || { echo "ERROR: py.typed missing from wheel"; exit 1; }
+    - name: Install the wheel in a clean env and smoke-test it
+      run: |
+        set -euo pipefail
+        python -m venv /tmp/smoke
+        /tmp/smoke/bin/pip install dist/*.whl
+        /tmp/smoke/bin/python - <<'PY'
+        import importlib.metadata as md
+        import pathlib
+        import time_executioner as te
+        from time_executioner import TimeExecutioner
+
+        version = md.version("time_executioner")
+        assert version == te.__version__, f"{version} != {te.__version__}"
+        assert version != "0.0.0", "version did not resolve; check tool.setuptools.dynamic"
+        assert (pathlib.Path(te.__file__).parent / "py.typed").exists(), "py.typed not installed"
+
+        @TimeExecutioner.log
+        def work(x: int) -> int:
+            return x * 2
+
+        assert work(21) == 42
+        with TimeExecutioner.time("smoke"):
+            pass
+        print(f"smoke test OK: time_executioner {version}")
+        PY

@@ -1,5 +1,5 @@
-import asyncio
 import functools
+import inspect
 import logging
 import time
 from contextlib import contextmanager
@@ -112,7 +112,7 @@ class TimeExecutioner:
                 start_time = time.perf_counter()
                 func_name = f"{func.__name__}()"
                 class_name = args[0].__class__.__name__ if args else ""
-                is_async = asyncio.iscoroutinefunction(func)
+                is_async = inspect.iscoroutinefunction(func)
                 try:
                     result = await func(*args, **kwargs)
                     TimeExecutioner._log_execution(
@@ -136,7 +136,7 @@ class TimeExecutioner:
                 start_time = time.perf_counter()
                 func_name = f"{func.__name__}()"
                 class_name = args[0].__class__.__name__ if args else ""
-                is_async = asyncio.iscoroutinefunction(func)
+                is_async = inspect.iscoroutinefunction(func)
 
                 try:
                     result = func(*args, **kwargs)
@@ -155,7 +155,7 @@ class TimeExecutioner:
                     )
                     raise
 
-            return cast(T, async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper)
+            return cast(T, async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper)
 
         return _run(f_py) if callable(f_py) else _run
 

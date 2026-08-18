@@ -3,6 +3,15 @@
 A simple common decorator and context manager library for timing and logging function calls in python,
 including support for both sync and async function types.
 
+Requires Python 3.11+. Fully type annotated and ships a `py.typed` marker, so
+`mypy` and other type checkers see the annotations in your project.
+
+## Installation
+
+```bash
+pip install time_executioner
+```
+
 ## Usage
 
 To use the `TimeExecutioner` package you can simply use the python decorator features around your method.

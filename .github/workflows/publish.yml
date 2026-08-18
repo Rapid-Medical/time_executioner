@@ -1,0 +1,66 @@
+# Publishes to PyPI when a version tag is pushed.
+#
+# SETUP REQUIRED before the first run — this workflow uses PyPI Trusted
+# Publishing (OIDC), so there is no API token to store:
+#   1. Create the project on PyPI, or pre-register the name.
+#   2. On PyPI: Manage -> Publishing -> add a trusted publisher with
+#        owner: Rapid-Medical   repo: time_executioner
+#        workflow: publish.yml  environment: pypi
+#   3. In this repo: Settings -> Environments -> create "pypi".
+#
+# To cut a release: bump __version__ in src/time_executioner/__init__.py,
+# commit, then `git tag v0.1.0 && git push origin v0.1.0`.
+
+name: Publish to PyPI
+
+on:
+  push:
+    tags: [ "v*" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: Build sdist and wheel
+      run: |
+        python -m pip install --upgrade pip build twine
+        python -m build
+    - name: Check distribution metadata
+      run: twine check dist/*
+    - name: Verify the tag matches the package version
+      run: |
+        set -euo pipefail
+        python -m pip install -e .
+        pkg_version=$(python -c 'import time_executioner; print(time_executioner.__version__)')
+        tag_version="${GITHUB_REF_NAME#v}"
+        echo "tag=$tag_version package=$pkg_version"
+        if [ "$pkg_version" != "$tag_version" ]; then
+          echo "ERROR: tag $GITHUB_REF_NAME does not match __version__ $pkg_version"
+          exit 1
+        fi
+        if [ "$pkg_version" = "0.0.0" ]; then
+          echo "ERROR: version did not resolve; check tool.setuptools.dynamic"
+          exit 1
+        fi
+    - uses: actions/upload-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # required for trusted publishing; no API token needed
+      id-token: write
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist/
+    - uses: pypa/gh-action-pypi-publish@release/v1
