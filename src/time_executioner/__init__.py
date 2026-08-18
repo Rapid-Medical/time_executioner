@@ -1,14 +1,15 @@
 """
-Time Executioner - A decorator for measuring execution time of functions
+Time Executioner - A decorator and context manager for measuring execution time of functions
 """
 
+from ._core import TimeExecutioner
 
-def __version__():
-    """Return the version of the simple_stats package."""
-    return "0.0.2"
+__version__ = "0.1.0"
+
+__all__ = ["TimeExecutioner", "__version__", "describe"]
 
 
-def describe():
+def describe() -> None:
     """Print a description of the package and its features."""
     description = (
         "Time Executioner\n"
@@ -22,5 +23,5 @@ def describe():
         "    @TimeExecutioner.log(log_level='debug')\n"
         "    def my_method_to_time(): \n"
         "        ...\n"
-    ).format(__version__())
+    ).format(__version__)
     print(description)

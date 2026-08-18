@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.time_executioner import TimeExecutioner
+from time_executioner import TimeExecutioner
 
 
 # Test classes and functions

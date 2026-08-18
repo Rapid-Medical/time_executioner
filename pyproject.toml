@@ -19,5 +19,14 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 
 [project.urls]
-Homepage = "https://github.com/Rapid-Medical/time_executionert"
+Homepage = "https://github.com/Rapid-Medical/time_executioner"
 Issues = "https://github.com/Rapid-Medical/time_executioner/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "time_executioner.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+time_executioner = ["py.typed"]
