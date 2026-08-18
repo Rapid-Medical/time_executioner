@@ -74,3 +74,23 @@ logger = EliteCustomLogger()
 TimeExecutioner.set_logger(logger)
 ```
 
+`set_logger()` sets the default for the whole process, so the last caller wins. If you
+are writing a library, or share a process with code you do not control, pass `logger=`
+per use instead — it overrides the default without mutating it:
+
+```python
+from time_executioner import TimeExecutioner
+
+
+@TimeExecutioner.log(logger=my_logger)
+def my_cool_method_to_time():
+    ...
+
+
+with TimeExecutioner.time("my-expensive-codeblock", logger=my_logger):
+    ...
+```
+
+`TimeExecutioner.reset_logger()` restores the built-in default, which is useful for
+undoing a `set_logger()` call in test teardown.
+

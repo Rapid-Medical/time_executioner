@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `logger=` argument on `TimeExecutioner.log()` and `TimeExecutioner.time()`, for
+  overriding the logger per use. `set_logger()` mutates process-wide state, so two
+  consumers in one process previously had no way to avoid clobbering each other.
+- `TimeExecutioner.reset_logger()`, restoring the built-in default logger.
+
+### Fixed
+
+- The test suite no longer leaks a `set_logger()` call into the process-wide
+  default, which previously persisted past the run that made it.
+
 ## [0.1.0] - 2026-08-18
 
 First release published to PyPI. Earlier `0.0.x` tags were never published, and
