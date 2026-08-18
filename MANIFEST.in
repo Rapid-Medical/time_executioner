@@ -1,0 +1,6 @@
+# setuptools' sdist heuristics pick up tests/test_*.py but not the package
+# marker, and no top-level docs beyond README/LICENSE. Include them so the
+# sdist is self-contained and its test suite is runnable.
+include CHANGELOG.md
+include CONTRIBUTING.md
+include tests/__init__.py
