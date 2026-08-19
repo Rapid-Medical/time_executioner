@@ -1,5 +1,10 @@
 # PEP 751 lock file for the development toolchain, installed by pip in CI.
 #
+# The project itself is deliberately not an entry here: pip refuses to install
+# a pylock.toml containing a directory source alongside hashed ones ("can't
+# verify hashes for these file:// requirements"), so the project is installed
+# separately with --no-deps.
+#
 # Regenerate after changing dependencies in pyproject.toml:
 #   uv pip compile pyproject.toml --extra dev --universal \
 #       --python-version 3.11 -o pylock.toml
