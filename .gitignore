@@ -25,6 +25,8 @@ eggs/
 
 # Test / type-check artifacts
 .coverage
+# written by the test job, uploaded to the Sonar scan rather than committed
+coverage.xml
 .pytest_cache/
 .mypy_cache/
 

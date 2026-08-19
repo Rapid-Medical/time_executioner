@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Code analysis moved from SonarQube Cloud Automatic Analysis to a scan run from
+  CI, with a coverage report attached. Automatic Analysis cannot import coverage,
+  so the dashboard reported none for a suite that in fact covers 96% of the
+  package. Configuration moved from `.sonarcloud.properties` to
+  `sonar-project.properties` accordingly; the latter also supports
+  `sonar.issue.ignore.multicriteria`, so known false positives are now recorded
+  in the repository and reviewable in a diff instead of marked won't-fix in the
+  dashboard.
 
 ## [0.1.0] - 2026-08-18
 
