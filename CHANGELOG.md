@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TimeExecutioner.reset_logger()`, restoring the built-in default logger.
 - All GitHub Actions references pinned to commit SHAs rather than mutable tags,
   with Dependabot configured to keep them current.
+- `requirements-publish.txt`, a hash-pinned build toolchain for the release
+  workflow. The publish job previously installed the full unpinned dev extra
+  before building the artifact it uploads to PyPI, so a compromised release of
+  any build-time dependency could have altered what users receive. It now
+  installs only `build` and `twine`, with `--require-hashes`.
+- Explicit least-privilege `permissions: contents: read` on both workflows.
 
 ### Fixed
 

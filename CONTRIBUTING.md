@@ -68,3 +68,9 @@ git tag v0.1.0 && git push origin v0.1.0
 The publish workflow verifies the tag matches `__version__`, then uploads to
 PyPI via trusted publishing. Version numbers cannot be reused on PyPI, so the
 tag/version check is a hard gate.
+
+That workflow builds with only `build` and `twine`, installed from
+`requirements-publish.txt` with `--require-hashes`, rather than the dev extra:
+anything running during the release build can alter the artifact that reaches
+users. If you need to change that toolchain, edit `requirements-publish.in` and
+regenerate — the command is in the generated file's header.
