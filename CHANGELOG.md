@@ -7,28 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- `logger=` argument on `TimeExecutioner.log()` and `TimeExecutioner.time()`, for
-  overriding the logger per use. `set_logger()` mutates process-wide state, so two
-  consumers in one process previously had no way to avoid clobbering each other.
-- `TimeExecutioner.reset_logger()`, restoring the built-in default logger.
-- All GitHub Actions references pinned to commit SHAs rather than mutable tags,
-  with Dependabot configured to keep them current.
-- `requirements-publish.txt`, a hash-pinned build toolchain for the release
-  workflow. The publish job previously installed the full unpinned dev extra
-  before building the artifact it uploads to PyPI, so a compromised release of
-  any build-time dependency could have altered what users receive. It now
-  installs only `build` and `twine`, with `--require-hashes`.
-- Explicit least-privilege `permissions` declared per job on both workflows.
-- `pylock.toml`, a PEP 751 lock file pinning every development dependency to an
-  exact version and hash, installed by pip in CI so contributors and CI run
-  identical tooling.
-
-### Fixed
-
-- The test suite no longer leaks a `set_logger()` call into the process-wide
-  default, which previously persisted past the run that made it.
+Nothing yet.
 
 ## [0.1.0] - 2026-08-18
 
@@ -52,9 +31,16 @@ first version with a correct, installable distribution.
   removal in Python 3.16. The test suite's blanket `-W ignore::DeprecationWarning`
   had been hiding this.
 - Corrected a typo in the `Homepage` project URL.
+- The test suite no longer leaks a `set_logger()` call into the process-wide
+  default, which previously persisted past the run that made it.
 
 ### Added
 
+- **`logger=` argument** on `TimeExecutioner.log()` and `TimeExecutioner.time()`,
+  for overriding the logger per use. `set_logger()` mutates process-wide state, so
+  two consumers in one process previously had no way to avoid clobbering each
+  other.
+- `TimeExecutioner.reset_logger()`, restoring the built-in default logger.
 - **`py.typed` marker.** The library was fully annotated but shipped no PEP 561
   marker, so type checkers in consuming projects silently ignored every
   annotation. Type information is now published.
@@ -65,6 +51,17 @@ first version with a correct, installable distribution.
 - A tag-triggered PyPI publish workflow using trusted publishing.
 - PyPI keywords and classifiers, including `Typing :: Typed`.
 - This changelog and `CONTRIBUTING.md`.
+- All GitHub Actions references pinned to commit SHAs rather than mutable tags,
+  with Dependabot configured to keep them current.
+- `requirements-publish.txt`, a hash-pinned build toolchain for the release
+  workflow. The publish job previously installed the full unpinned dev extra
+  before building the artifact it uploads to PyPI, so a compromised release of
+  any build-time dependency could have altered what users receive. It now
+  installs only `build` and `twine`, with `--require-hashes`.
+- Explicit least-privilege `permissions` declared per job on both workflows.
+- `pylock.toml`, a PEP 751 lock file pinning every development dependency to an
+  exact version and hash, installed by pip in CI so contributors and CI run
+  identical tooling.
 
 ### Changed
 
