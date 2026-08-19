@@ -6,6 +6,8 @@ from contextlib import contextmanager
 from logging import Logger
 from typing import Any, Callable, Generator, Optional, TypeVar, cast
 
+from ._accumulator import PhaseAccumulator
+
 T = TypeVar("T", bound=Callable[..., Any])
 
 _DEFAULT_LOGGER: Logger = logging.getLogger(__name__)
@@ -59,9 +61,14 @@ class TimeExecutioner:
         extra: Optional[dict[str, Any]] = None,
         error: Optional[Exception | None] = None,
         logger: Optional[Logger] = None,
+        summary: Optional[str] = None,
     ) -> None:
         """
-        Helper function to handle logging logic
+        Helper function to handle logging logic.
+
+        When `summary` is given it replaces the generated message on both the
+        success and error branches. Callers that pass it own the whole line,
+        including any error text; this keeps phase formatting out of here.
         """
 
         execution_time = time.perf_counter() - start_time
@@ -86,11 +93,22 @@ class TimeExecutioner:
         if error is None:
             active_logger.log(
                 int_level,
-                f"{class_name}.{func_name}: executed in {execution_time:.3f} seconds",
+                (
+                    summary
+                    if summary is not None
+                    else f"{class_name}.{func_name}: executed in {execution_time:.3f} seconds"
+                ),
                 extra=payload,
             )
         else:
-            active_logger.error(f"Error in {class_name}.{func_name}: {str(error)}", extra=payload)
+            active_logger.error(
+                (
+                    summary
+                    if summary is not None
+                    else f"Error in {class_name}.{func_name}: {str(error)}"
+                ),
+                extra=payload,
+            )
 
     @staticmethod
     def log(f_py: Any = None, log_level: str = "info", logger: Optional[Logger] = None):
@@ -200,4 +218,68 @@ class TimeExecutioner:
             msg = f"{label}"
             TimeExecutioner._log_execution(
                 log_level, start_time, msg, "time_execute", extra=extra, logger=logger
+            )
+
+    @staticmethod
+    @contextmanager
+    def accumulate(
+        label: str,
+        log_level: str = "info",
+        extra: dict[str, Any] | None = None,
+        logger: Logger | None = None,
+    ) -> Generator[PhaseAccumulator, None, None]:
+        """
+        Accumulate many timed blocks and log one summary line on exit.
+
+        Where `time()` logs on every context exit, this logs once, so timing a
+        phase inside a ten-thousand-iteration loop costs one line instead of ten
+        thousand. The yielded accumulator offers `time(label)` for phases and
+        `count(name, n=1)` for tallies.
+
+        The reported `unaccounted` figure is wall clock minus the sum of the
+        phases: the time that went somewhere nobody thought to measure.
+
+        On an exception the summary is logged at error level with the breakdown
+        intact and the exception propagates, so a run that dies still reports
+        where its time went.
+
+        Args:
+            label (str): a label identifying the run
+            log_level (str): log level for the summary. Defaults to "info".
+            extra (dict): extra data for the log record; wins over the keys this
+                adds ("phases", "counts", "unaccounted")
+            logger (Logger): a logger for this use only, overriding the default.
+                Resolved once on entry, and used for the summary and for any
+                overlap warning.
+        """
+        active_logger = logger if logger is not None else TimeExecutioner._logger
+        accumulator = PhaseAccumulator(label, active_logger)
+
+        start_time = time.perf_counter()
+        error: Exception | None = None
+        try:
+            yield accumulator
+        except Exception as e:
+            error = e
+            raise
+        finally:
+            wall = time.perf_counter() - start_time
+            payload = accumulator.payload(wall)
+            # _log_execution derives execution_time from start_time a few
+            # microseconds after `wall` is taken. Override it so the record
+            # closes on itself: execution_time - sum(phases) == unaccounted,
+            # and the payload agrees with the `total=` in the message.
+            payload["execution_time"] = wall
+            if extra is not None:
+                payload = payload | extra
+
+            TimeExecutioner._log_execution(
+                log_level,
+                start_time,
+                label,
+                "time_accumulate",
+                extra=payload,
+                error=error,
+                summary=accumulator.summary(wall, error),
+                logger=active_logger,
             )
