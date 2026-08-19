@@ -70,3 +70,51 @@ jobs:
     # pinned to a commit SHA: `release/v1` is a mutable branch ref, and this
     # step holds PyPI publishing rights via OIDC
     - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+
+  release:
+    # only after PyPI accepts the upload, so a failed publish cannot leave a
+    # GitHub release pointing at a version nobody can install
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      # the only job that writes to the repository, and only to cut the release
+      contents: write
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      with:
+        name: dist
+        path: dist/
+    - name: Take the release notes from the changelog
+      run: |
+        set -euo pipefail
+        # python3, not python: this job has no setup-python step and the
+        # runner image only guarantees python3 on PATH
+        python3 - "${GITHUB_REF_NAME#v}" > release-notes.md <<'PY'
+        import re, sys
+
+        version = sys.argv[1]
+        text = open("CHANGELOG.md", encoding="utf-8").read()
+        # "## [1.2.3] - date" or "## 1.2.3", up to the next level-2 heading
+        pattern = rf"^## \[?{re.escape(version)}\]?.*?$(.*?)(?=^## |\Z)"
+        match = re.search(pattern, text, re.MULTILINE | re.DOTALL)
+        sys.stdout.write(match.group(1).strip() if match else "")
+        PY
+        if [ -s release-notes.md ]; then
+          echo "using changelog section for ${GITHUB_REF_NAME#v}"
+        else
+          echo "no changelog section for ${GITHUB_REF_NAME#v}; generating notes"
+        fi
+    - name: Create the GitHub release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        # attach the same artifacts that went to PyPI
+        if [ -s release-notes.md ]; then
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
+        else
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        fi
