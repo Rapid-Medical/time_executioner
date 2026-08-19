@@ -20,7 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before building the artifact it uploads to PyPI, so a compromised release of
   any build-time dependency could have altered what users receive. It now
   installs only `build` and `twine`, with `--require-hashes`.
-- Explicit least-privilege `permissions: contents: read` on both workflows.
+- Explicit least-privilege `permissions` declared per job on both workflows.
+- `pylock.toml`, a PEP 751 lock file pinning every development dependency to an
+  exact version and hash, installed by pip in CI so contributors and CI run
+  identical tooling.
 
 ### Fixed
 

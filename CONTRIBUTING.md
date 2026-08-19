@@ -10,9 +10,16 @@ Requires Python 3.11 or newer.
 git clone https://github.com/Rapid-Medical/time_executioner.git
 cd time_executioner
 python -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'
+pip install -r pylock.toml       # locked dev toolchain, hashes verified
+pip install -e . --no-deps       # the project itself
 pre-commit install
 ```
+
+`pylock.toml` is a [PEP 751](https://peps.python.org/pep-0751/) lock file
+holding the exact version and hash of every development dependency, so CI and
+contributors run identical tooling. If you change dependencies in
+`pyproject.toml`, regenerate it — the command is in the file's header — and
+commit the result.
 
 The editable install matters: the tests import the installed `time_executioner`
 package, not the `src/` tree. Running `pytest` without installing first will fail
