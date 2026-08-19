@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.time_executioner import TimeExecutioner
+from time_executioner import TimeExecutioner
 
 
 # Test classes and functions
@@ -56,6 +56,14 @@ async def standalone_async_function(x: int) -> int:
 def standalone_sync_function_with_log_level(x: int) -> int:
     time.sleep(0.1)
     return x * 2
+
+
+@pytest.fixture(autouse=True)
+def restore_global_logger():
+    """set_logger mutates process-wide state; never let it leak between tests."""
+    original = TimeExecutioner._logger
+    yield
+    TimeExecutioner._logger = original
 
 
 @pytest.fixture
@@ -225,3 +233,81 @@ class TestTimeExecuteContextManager:
             time.sleep(0.1)
 
         assert mock_logger.log.call_args[1]["extra"]["extra_key"] == "extra_value"
+
+
+class TestLoggerConfiguration:
+    """The default logger is process-wide state, so a per-use override has to
+    exist for two consumers in one process not to clobber each other."""
+
+    def test_per_call_logger_on_decorator(self) -> None:
+        mine = Mock()
+
+        @TimeExecutioner.log(logger=mine)
+        def work(x: int) -> int:
+            return x * 2
+
+        assert work(5) == 10
+        mine.log.assert_called_once()
+
+    def test_per_call_logger_leaves_global_untouched(self) -> None:
+        before = TimeExecutioner._logger
+        mine = Mock()
+
+        @TimeExecutioner.log(logger=mine)
+        def work() -> None:
+            pass
+
+        work()
+        assert TimeExecutioner._logger is before
+
+    def test_per_call_logger_wins_over_global(self) -> None:
+        theirs, mine = Mock(), Mock()
+        TimeExecutioner.set_logger(theirs)
+
+        @TimeExecutioner.log(logger=mine)
+        def work() -> None:
+            pass
+
+        work()
+        mine.log.assert_called_once()
+        theirs.log.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_per_call_logger_on_async_decorator(self) -> None:
+        mine = Mock()
+
+        @TimeExecutioner.log(logger=mine)
+        async def work(x: int) -> int:
+            return x * 2
+
+        assert await work(5) == 10
+        mine.log.assert_called_once()
+
+    def test_per_call_logger_on_context_manager(self) -> None:
+        theirs, mine = Mock(), Mock()
+        TimeExecutioner.set_logger(theirs)
+
+        with TimeExecutioner.time("block", logger=mine):
+            pass
+
+        mine.log.assert_called_once()
+        theirs.log.assert_not_called()
+
+    def test_per_call_logger_receives_errors(self) -> None:
+        mine = Mock()
+
+        @TimeExecutioner.log(logger=mine)
+        def boom() -> None:
+            raise ValueError("nope")
+
+        with pytest.raises(ValueError, match="nope"):
+            boom()
+
+        mine.error.assert_called_once()
+
+    def test_reset_logger_restores_the_default(self) -> None:
+        TimeExecutioner.set_logger(Mock())
+        TimeExecutioner.reset_logger()
+
+        assert isinstance(TimeExecutioner._logger, logging.Logger)
+        assert TimeExecutioner._logger.name == "time_executioner._core"

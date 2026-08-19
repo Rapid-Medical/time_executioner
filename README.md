@@ -3,6 +3,15 @@
 A simple common decorator and context manager library for timing and logging function calls in python,
 including support for both sync and async function types.
 
+Requires Python 3.11+. Fully type annotated and ships a `py.typed` marker, so
+`mypy` and other type checkers see the annotations in your project.
+
+## Installation
+
+```bash
+pip install time_executioner
+```
+
 ## Usage
 
 To use the `TimeExecutioner` package you can simply use the python decorator features around your method.
@@ -64,4 +73,24 @@ supported:
 logger = EliteCustomLogger()
 TimeExecutioner.set_logger(logger)
 ```
+
+`set_logger()` sets the default for the whole process, so the last caller wins. If you
+are writing a library, or share a process with code you do not control, pass `logger=`
+per use instead — it overrides the default without mutating it:
+
+```python
+from time_executioner import TimeExecutioner
+
+
+@TimeExecutioner.log(logger=my_logger)
+def my_cool_method_to_time():
+    ...
+
+
+with TimeExecutioner.time("my-expensive-codeblock", logger=my_logger):
+    ...
+```
+
+`TimeExecutioner.reset_logger()` restores the built-in default, which is useful for
+undoing a `set_logger()` call in test teardown.
 

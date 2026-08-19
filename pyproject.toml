@@ -11,13 +11,56 @@ authors = [
 description = "Common library to time the execution of functions"
 readme = "README.md"
 requires-python = ">=3.11"
+keywords = [
+    "timing", "profiling", "performance", "benchmark",
+    "logging", "decorator", "context-manager", "async",
+]
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Benchmark",
+    "Topic :: System :: Logging",
+    "Typing :: Typed",
 ]
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
 
+[project.optional-dependencies]
+dev = [
+    "build",
+    "flake8",
+    "mypy",
+    "pre-commit",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "twine",
+]
+
 [project.urls]
-Homepage = "https://github.com/Rapid-Medical/time_executionert"
+Homepage = "https://github.com/Rapid-Medical/time_executioner"
 Issues = "https://github.com/Rapid-Medical/time_executioner/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "time_executioner.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+time_executioner = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+# Surface deprecations from CPython and our own code as failures: this suite
+# silently hid the asyncio.iscoroutinefunction removal behind a blanket
+# `-W ignore::DeprecationWarning` until it was two releases from breaking.
+filterwarnings = ["error::DeprecationWarning"]

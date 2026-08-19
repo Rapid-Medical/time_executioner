@@ -23,13 +23,15 @@ repos:
     - --extend-ignore=E203
     - .
 - repo: https://github.com/pycqa/bandit
-  rev: 1.7.5
+  rev: 1.8.6
   hooks:
   - id: bandit
     args:
     - -r
     - -x
-    - "*test*.py"
+    # the hook passes `.`, so without these excludes bandit recurses into a
+    # local virtualenv and fails on third-party asserts
+    - "*test*.py,./.venv/*,./venv/*,./build/*,./dist/*"
     - .
 - repo: https://github.com/pre-commit/mirrors-mypy
   rev: v1.5.0

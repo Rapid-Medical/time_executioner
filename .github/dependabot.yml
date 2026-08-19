@@ -1,0 +1,11 @@
+# Pinned action SHAs only stay a security win if something keeps them current;
+# a stale pin is worse than a floating one. Dependabot opens the PRs.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]

@@ -1,0 +1,72 @@
+# Publishes to PyPI when a version tag is pushed.
+#
+# SETUP REQUIRED before the first run — this workflow uses PyPI Trusted
+# Publishing (OIDC), so there is no API token to store:
+#   1. Create the project on PyPI, or pre-register the name.
+#   2. On PyPI: Manage -> Publishing -> add a trusted publisher with
+#        owner: Rapid-Medical   repo: time_executioner
+#        workflow: publish.yml  environment: pypi
+#   3. In this repo: Settings -> Environments -> create "pypi".
+#
+# To cut a release: bump __version__ in src/time_executioner/__init__.py,
+# commit, then `git tag v0.1.0 && git push origin v0.1.0`.
+
+name: Publish to PyPI
+
+on:
+  push:
+    tags: [ "v*" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+    # only the build toolchain, hash-pinned. The dev extra is deliberately not
+    # installed here: anything running during this build can alter the artifact
+    # that is about to be published under this project's name.
+    - name: Install the pinned build toolchain
+      run: python -m pip install --require-hashes -r requirements-publish.txt
+    - name: Build sdist and wheel
+      run: python -m build
+    - name: Check distribution metadata
+      run: twine check dist/*
+    - name: Verify the tag matches the package version
+      run: |
+        set -euo pipefail
+        # read the version out of the built wheel rather than importing the
+        # project, so this checks what is actually about to be published
+        pkg_version=$(python -c "import email, glob, zipfile; z = zipfile.ZipFile(glob.glob('dist/*.whl')[0]); m = next(n for n in z.namelist() if n.endswith('.dist-info/METADATA')); print(email.message_from_bytes(z.read(m))['Version'])")
+        tag_version="${GITHUB_REF_NAME#v}"
+        echo "tag=$tag_version package=$pkg_version"
+        if [ "$pkg_version" != "$tag_version" ]; then
+          echo "ERROR: tag $GITHUB_REF_NAME does not match __version__ $pkg_version"
+          exit 1
+        fi
+        if [ "$pkg_version" = "0.0.0" ]; then
+          echo "ERROR: version did not resolve; check tool.setuptools.dynamic"
+          exit 1
+        fi
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      with:
+        name: dist
+        path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      # required for trusted publishing; no API token needed
+      id-token: write
+    steps:
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      with:
+        name: dist
+        path: dist/
+    # pinned to a commit SHA: `release/v1` is a mutable branch ref, and this
+    # step holds PyPI publishing rights via OIDC
+    - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2

@@ -1,5 +1,5 @@
-import asyncio
 import functools
+import inspect
 import logging
 import time
 from contextlib import contextmanager
@@ -7,6 +7,8 @@ from logging import Logger
 from typing import Any, Callable, Generator, Optional, TypeVar, cast
 
 T = TypeVar("T", bound=Callable[..., Any])
+
+_DEFAULT_LOGGER: Logger = logging.getLogger(__name__)
 
 
 class TimeExecutioner:
@@ -23,12 +25,24 @@ class TimeExecutioner:
     anything that implements the logging.Logger interface.
     """
 
-    _logger: Logger = logging.getLogger(__name__)  # Class-level logger
+    _logger: Logger = _DEFAULT_LOGGER  # Class-level logger
 
     @classmethod
     def set_logger(cls, logger: Logger) -> None:
-        """Set a custom logger for the TimeExecutioner class."""
+        """
+        Set the default logger for every TimeExecutioner use in this process.
+
+        This is process-wide state: the last caller wins. If you are a library,
+        or otherwise share a process with code you do not control, prefer the
+        per-use `logger=` argument on `log()` and `time()`, which overrides this
+        default without mutating it.
+        """
         cls._logger = logger
+
+    @classmethod
+    def reset_logger(cls) -> None:
+        """Restore the built-in default logger, discarding any set_logger() call."""
+        cls._logger = _DEFAULT_LOGGER
 
     @property
     def logger(self) -> Logger:
@@ -44,13 +58,14 @@ class TimeExecutioner:
         is_async: Optional[bool] = False,
         extra: Optional[dict[str, Any]] = None,
         error: Optional[Exception | None] = None,
+        logger: Optional[Logger] = None,
     ) -> None:
         """
         Helper function to handle logging logic
         """
 
         execution_time = time.perf_counter() - start_time
-        te = TimeExecutioner()
+        active_logger = logger if logger is not None else TimeExecutioner._logger
 
         # when calling logger.log, you're expected to pass in an int level.
         # however, the inbuilt logging.getLevelName() is a mess. this
@@ -69,16 +84,16 @@ class TimeExecutioner:
             payload = payload | extra
 
         if error is None:
-            te.logger.log(
+            active_logger.log(
                 int_level,
                 f"{class_name}.{func_name}: executed in {execution_time:.3f} seconds",
                 extra=payload,
             )
         else:
-            te.logger.error(f"Error in {class_name}.{func_name}: {str(error)}", extra=payload)
+            active_logger.error(f"Error in {class_name}.{func_name}: {str(error)}", extra=payload)
 
     @staticmethod
-    def log(f_py: Any = None, log_level: str = "info"):
+    def log(f_py: Any = None, log_level: str = "info", logger: Optional[Logger] = None):
         """
         the outer decorator function for time executioner logging. Because of how decorators
         work, in python, we need to nest the core decorator function inside another decorator
@@ -112,11 +127,11 @@ class TimeExecutioner:
                 start_time = time.perf_counter()
                 func_name = f"{func.__name__}()"
                 class_name = args[0].__class__.__name__ if args else ""
-                is_async = asyncio.iscoroutinefunction(func)
+                is_async = inspect.iscoroutinefunction(func)
                 try:
                     result = await func(*args, **kwargs)
                     TimeExecutioner._log_execution(
-                        log_level, start_time, func_name, class_name, is_async
+                        log_level, start_time, func_name, class_name, is_async, logger=logger
                     )
 
                     return result
@@ -128,6 +143,7 @@ class TimeExecutioner:
                         class_name,
                         is_async,
                         error=e,
+                        logger=logger,
                     )
                     raise
 
@@ -136,12 +152,12 @@ class TimeExecutioner:
                 start_time = time.perf_counter()
                 func_name = f"{func.__name__}()"
                 class_name = args[0].__class__.__name__ if args else ""
-                is_async = asyncio.iscoroutinefunction(func)
+                is_async = inspect.iscoroutinefunction(func)
 
                 try:
                     result = func(*args, **kwargs)
                     TimeExecutioner._log_execution(
-                        log_level, start_time, func_name, class_name, is_async
+                        log_level, start_time, func_name, class_name, is_async, logger=logger
                     )
                     return result
                 except Exception as e:
@@ -152,17 +168,21 @@ class TimeExecutioner:
                         class_name,
                         is_async,
                         error=e,
+                        logger=logger,
                     )
                     raise
 
-            return cast(T, async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper)
+            return cast(T, async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper)
 
         return _run(f_py) if callable(f_py) else _run
 
     @staticmethod
     @contextmanager
     def time(
-        label: str, log_level: str = "info", extra: dict[str, Any] | None = None
+        label: str,
+        log_level: str = "info",
+        extra: dict[str, Any] | None = None,
+        logger: Logger | None = None,
     ) -> Generator[Any, None, None]:
         """
         a context manager for time executioner logging. Allows you to time and log a block of code.
@@ -178,4 +198,6 @@ class TimeExecutioner:
             yield
         finally:
             msg = f"{label}"
-            TimeExecutioner._log_execution(log_level, start_time, msg, "time_execute", extra=extra)
+            TimeExecutioner._log_execution(
+                log_level, start_time, msg, "time_execute", extra=extra, logger=logger
+            )
