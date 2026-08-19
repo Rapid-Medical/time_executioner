@@ -1,11 +1,12 @@
 import asyncio
 import logging
+import threading
 import time
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from time_executioner import TimeExecutioner
+from time_executioner import PhaseAccumulator, TimeExecutioner
 
 
 # Test classes and functions
@@ -311,3 +312,416 @@ class TestLoggerConfiguration:
 
         assert isinstance(TimeExecutioner._logger, logging.Logger)
         assert TimeExecutioner._logger.name == "time_executioner._core"
+
+
+class TestLogExecutionSummaryOverride:
+    def test_summary_replaces_the_success_message(self) -> None:
+        logger = Mock()
+
+        TimeExecutioner._log_execution(
+            "info",
+            time.perf_counter(),
+            "job",
+            "time_accumulate",
+            summary="job: fetch=1.0s total=2.0s",
+            logger=logger,
+        )
+
+        assert logger.log.call_args[0][1] == "job: fetch=1.0s total=2.0s"
+
+    def test_summary_replaces_the_error_message(self) -> None:
+        logger = Mock()
+
+        TimeExecutioner._log_execution(
+            "info",
+            time.perf_counter(),
+            "job",
+            "time_accumulate",
+            error=ValueError("nope"),
+            summary="job: total=2.0s error=ValueError: nope",
+            logger=logger,
+        )
+
+        assert logger.error.call_args[0][0] == "job: total=2.0s error=ValueError: nope"
+
+    def test_without_summary_the_success_message_is_unchanged(self) -> None:
+        logger = Mock()
+
+        TimeExecutioner._log_execution("info", time.perf_counter(), "f()", "C", logger=logger)
+
+        assert "C.f(): executed in" in logger.log.call_args[0][1]
+
+    def test_without_summary_the_error_message_is_unchanged(self) -> None:
+        logger = Mock()
+
+        TimeExecutioner._log_execution(
+            "info",
+            time.perf_counter(),
+            "f()",
+            "C",
+            error=ValueError("nope"),
+            logger=logger,
+        )
+
+        assert logger.error.call_args[0][0] == "Error in C.f(): nope"
+
+    def test_summary_does_not_change_the_payload(self) -> None:
+        logger = Mock()
+
+        TimeExecutioner._log_execution(
+            "info",
+            time.perf_counter(),
+            "job",
+            "time_accumulate",
+            summary="anything",
+            logger=logger,
+        )
+
+        payload = logger.log.call_args[1]["extra"]
+        assert payload["function_name"] == "job"
+        assert payload["class_name"] == "time_accumulate"
+        assert isinstance(payload["execution_time"], float)
+
+
+class TestPhaseAccumulatorTotals:
+    def test_same_label_accumulates_across_entries(self) -> None:
+        acc = PhaseAccumulator("batch", Mock())
+
+        for _ in range(3):
+            with acc.time("fetch"):
+                time.sleep(0.01)
+
+        assert list(acc.phases) == ["fetch"]
+        assert acc.phases["fetch"] >= 0.03
+
+    def test_phases_are_ordered_by_first_entry(self) -> None:
+        acc = PhaseAccumulator("batch", Mock())
+
+        with acc.time("fetch"):
+            pass
+        with acc.time("write"):
+            pass
+        with acc.time("fetch"):
+            pass
+
+        assert list(acc.phases) == ["fetch", "write"]
+
+    def test_counts_accumulate_and_default_to_one(self) -> None:
+        acc = PhaseAccumulator("batch", Mock())
+
+        acc.count("skipped")
+        acc.count("skipped")
+        acc.count("rejected", 10)
+
+        assert acc.counts == {"skipped": 2, "rejected": 10}
+
+    def test_counts_and_phases_are_separate_namespaces(self) -> None:
+        acc = PhaseAccumulator("batch", Mock())
+
+        with acc.time("x"):
+            pass
+        acc.count("x", 5)
+
+        assert acc.counts["x"] == 5
+        assert isinstance(acc.phases["x"], float)
+
+    def test_snapshots_are_copies(self) -> None:
+        acc = PhaseAccumulator("batch", Mock())
+        acc.count("skipped")
+
+        acc.counts["skipped"] = 999
+        acc.phases["injected"] = 1.0
+
+        assert acc.counts == {"skipped": 1}
+        assert acc.phases == {}
+
+    def test_a_phase_is_recorded_even_when_the_block_raises(self) -> None:
+        acc = PhaseAccumulator("batch", Mock())
+
+        def fail_inside_the_phase() -> None:
+            with acc.time("fetch"):
+                raise ValueError("nope")
+
+        # The raise is the only thing in the block that should throw; if
+        # time() itself threw instead, `match` would not line up.
+        with pytest.raises(ValueError, match="nope"):
+            fail_inside_the_phase()
+
+        assert "fetch" in acc.phases
+
+    def test_totals_are_exact_under_thread_contention(self) -> None:
+        logger = Mock()
+        acc = PhaseAccumulator("batch", logger)
+        barrier = threading.Barrier(8)
+
+        def worker() -> None:
+            barrier.wait()
+            for _ in range(500):
+                with acc.time("work"):
+                    pass
+                acc.count("items")
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # A lost read-modify-write would show up here as a count below 4000.
+        assert acc.counts == {"items": 4000}
+        assert list(acc.phases) == ["work"]
+        # Each thread has its own overlap stack, so concurrent same-label
+        # blocks must not read as nesting.
+        logger.warning.assert_not_called()
+
+
+class TestPhaseAccumulatorOverlap:
+    def test_nested_blocks_warn_once_naming_both_labels(self) -> None:
+        logger = Mock()
+        acc = PhaseAccumulator("batch", logger)
+
+        with acc.time("outer"):
+            with acc.time("inner"):
+                pass
+
+        logger.warning.assert_called_once()
+        message = logger.warning.call_args[0][0]
+        assert "inner" in message
+        assert "outer" in message
+        assert "unaccounted" in message
+
+    def test_the_warning_does_not_repeat_per_iteration(self) -> None:
+        logger = Mock()
+        acc = PhaseAccumulator("batch", logger)
+
+        for _ in range(100):
+            with acc.time("outer"):
+                with acc.time("inner"):
+                    pass
+
+        logger.warning.assert_called_once()
+
+    def test_recursion_into_the_same_label_counts_as_overlap(self) -> None:
+        logger = Mock()
+        acc = PhaseAccumulator("batch", logger)
+
+        with acc.time("fetch"):
+            with acc.time("fetch"):
+                pass
+
+        logger.warning.assert_called_once()
+
+    def test_sequential_blocks_do_not_warn(self) -> None:
+        logger = Mock()
+        acc = PhaseAccumulator("batch", logger)
+
+        with acc.time("fetch"):
+            pass
+        with acc.time("write"):
+            pass
+
+        logger.warning.assert_not_called()
+
+    def test_overlapping_blocks_still_accumulate_naively(self) -> None:
+        acc = PhaseAccumulator("batch", Mock())
+
+        with acc.time("outer"):
+            with acc.time("inner"):
+                time.sleep(0.01)
+
+        # Both are charged the full elapsed time; nothing is subtracted.
+        assert acc.phases["inner"] >= 0.01
+        assert acc.phases["outer"] >= 0.01
+
+
+class TestPhaseAccumulatorRendering:
+    @staticmethod
+    def _loaded() -> PhaseAccumulator:
+        """An accumulator with fetch=315.200s, write=299.300s, skipped=12."""
+        acc = PhaseAccumulator("weather-load", Mock())
+        clock = [0.0, 315.2, 315.2, 614.5]
+        with patch("time_executioner._accumulator.time.perf_counter", side_effect=clock):
+            with acc.time("fetch"):
+                pass
+            with acc.time("write"):
+                pass
+        acc.count("skipped", 12)
+        return acc
+
+    def test_summary_matches_the_documented_shape(self) -> None:
+        summary = self._loaded().summary(781.0)
+
+        assert summary == (
+            "weather-load: fetch=315.200s write=299.300s skipped=12 "
+            "total=781.000s unaccounted=166.500s"
+        )
+
+    def test_summary_appends_the_error(self) -> None:
+        summary = self._loaded().summary(781.0, ValueError("nope"))
+
+        assert summary.endswith(" error=ValueError: nope")
+        assert "unaccounted=166.500s" in summary
+
+    def test_summary_of_an_empty_accumulator(self) -> None:
+        acc = PhaseAccumulator("idle", Mock())
+
+        assert acc.summary(2.0) == "idle: total=2.000s unaccounted=2.000s"
+
+    def test_payload_keeps_full_precision(self) -> None:
+        payload = self._loaded().payload(781.0)
+
+        assert payload["phases"]["fetch"] == pytest.approx(315.2)
+        assert payload["phases"]["write"] == pytest.approx(299.3)
+        assert payload["counts"] == {"skipped": 12}
+        assert payload["unaccounted"] == pytest.approx(166.5)
+
+    def test_counts_never_enter_the_unaccounted_arithmetic(self) -> None:
+        acc = self._loaded()
+        before = acc.payload(781.0)["unaccounted"]
+
+        acc.count("skipped", 1_000_000)
+
+        assert acc.payload(781.0)["unaccounted"] == before
+
+
+class TestAccumulate:
+    def test_one_record_regardless_of_iteration_count(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.accumulate("batch") as phases:
+            for _ in range(500):
+                with phases.time("fetch"):
+                    pass
+                with phases.time("write"):
+                    pass
+
+        mock_logger.log.assert_called_once()
+
+    def test_the_message_carries_the_breakdown(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.accumulate("batch") as phases:
+            with phases.time("fetch"):
+                pass
+            phases.count("skipped", 3)
+
+        message = mock_logger.log.call_args[0][1]
+        assert message.startswith("batch: fetch=")
+        assert "skipped=3" in message
+        assert "total=" in message
+        assert "unaccounted=" in message
+
+    def test_payload_shape(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.accumulate("batch") as phases:
+            with phases.time("fetch"):
+                pass
+            phases.count("skipped")
+
+        payload = mock_logger.log.call_args[1]["extra"]
+        assert payload["function_name"] == "batch"
+        assert payload["class_name"] == "time_accumulate"
+        assert isinstance(payload["execution_time"], float)
+        assert payload["is_async"] is False  # matches time(), which leaves the default
+        assert list(payload["phases"]) == ["fetch"]
+        assert payload["counts"] == {"skipped": 1}
+        assert isinstance(payload["unaccounted"], float)
+
+    def test_the_record_closes_on_itself(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.accumulate("batch") as phases:
+            with phases.time("fetch"):
+                time.sleep(0.01)
+
+        payload = mock_logger.log.call_args[1]["extra"]
+        message = mock_logger.log.call_args[0][1]
+        total = payload["execution_time"]
+
+        # One wall-clock reading behind all three, so the arithmetic a reader
+        # does on the payload matches what the message shows.
+        assert f"total={total:.3f}s" in message
+        assert payload["unaccounted"] == total - sum(payload["phases"].values())
+
+    def test_caller_extra_wins_on_collision(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.accumulate("batch", extra={"counts": "mine", "run_id": 7}):
+            pass
+
+        payload = mock_logger.log.call_args[1]["extra"]
+        assert payload["counts"] == "mine"
+        assert payload["run_id"] == 7
+
+    def test_log_level_is_honored(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.accumulate("batch", log_level="debug"):
+            pass
+
+        assert mock_logger.log.call_args[0][0] == logging.DEBUG
+
+    def test_unaccounted_is_non_negative_on_a_serial_path(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.accumulate("batch") as phases:
+            for _ in range(20):
+                with phases.time("fetch"):
+                    time.sleep(0.001)
+
+        payload = mock_logger.log.call_args[1]["extra"]
+        assert payload["unaccounted"] >= 0.0
+        assert payload["unaccounted"] < payload["execution_time"]
+
+    def test_empty_accumulator_still_flushes(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.accumulate("idle"):
+            pass
+
+        mock_logger.log.assert_called_once()
+        assert mock_logger.log.call_args[1]["extra"]["phases"] == {}
+
+    def test_exception_flushes_at_error_level_with_the_breakdown(self) -> None:
+        mine = Mock()
+
+        def fail_after_a_phase() -> None:
+            with TimeExecutioner.accumulate("batch", logger=mine) as phases:
+                with phases.time("fetch"):
+                    pass
+                raise ValueError("nope")
+
+        with pytest.raises(ValueError, match="nope"):
+            fail_after_a_phase()
+
+        mine.error.assert_called_once()
+        mine.log.assert_not_called()
+        message = mine.error.call_args[0][0]
+        assert "fetch=" in message
+        assert "unaccounted=" in message
+        assert message.endswith("error=ValueError: nope")
+        assert mine.error.call_args[1]["extra"]["error"] == "nope"
+
+    def test_partial_inner_block_is_recorded_when_it_raises(self) -> None:
+        mine = Mock()
+
+        def fail_mid_phase() -> None:
+            with TimeExecutioner.accumulate("batch", logger=mine) as phases:
+                with phases.time("fetch"):
+                    raise ValueError("nope")
+
+        with pytest.raises(ValueError, match="nope"):
+            fail_mid_phase()
+
+        assert "fetch" in mine.error.call_args[1]["extra"]["phases"]
+
+    def test_per_use_logger_wins_over_the_global(self) -> None:
+        theirs, mine = Mock(), Mock()
+        TimeExecutioner.set_logger(theirs)
+
+        with TimeExecutioner.accumulate("batch", logger=mine):
+            pass
+
+        mine.log.assert_called_once()
+        theirs.log.assert_not_called()
+
+    def test_the_overlap_warning_goes_to_the_same_logger(self) -> None:
+        mine = Mock()
+
+        with TimeExecutioner.accumulate("batch", logger=mine) as phases:
+            with phases.time("outer"):
+                with phases.time("inner"):
+                    pass
+
+        mine.warning.assert_called_once()
+
+    def test_the_yielded_object_is_a_phase_accumulator(self, mock_logger: MagicMock) -> None:
+        with TimeExecutioner.accumulate("batch") as phases:
+            pass
+
+        assert isinstance(phases, PhaseAccumulator)
