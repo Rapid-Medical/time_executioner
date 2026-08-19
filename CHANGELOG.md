@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   overriding the logger per use. `set_logger()` mutates process-wide state, so two
   consumers in one process previously had no way to avoid clobbering each other.
 - `TimeExecutioner.reset_logger()`, restoring the built-in default logger.
+- All GitHub Actions references pinned to commit SHAs rather than mutable tags,
+  with Dependabot configured to keep them current.
 
 ### Fixed
 

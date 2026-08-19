@@ -1,0 +1,5 @@
+[flake8]
+# A local virtualenv in the project root would otherwise be linted by
+# `flake8 .` in CI, reporting errors from third-party source. flake8 has no
+# pyproject.toml support, so this has to live in its own file.
+extend-exclude = .venv,venv,build,dist,.eggs,*.egg-info

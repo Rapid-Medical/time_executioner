@@ -35,11 +35,13 @@ license-files = ["LICEN[CS]E*"]
 [project.optional-dependencies]
 dev = [
     "build",
+    "flake8",
     "mypy",
     "pre-commit",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
+    "twine",
 ]
 
 [project.urls]

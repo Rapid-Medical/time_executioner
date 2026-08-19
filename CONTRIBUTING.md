@@ -22,7 +22,7 @@ same import path your users get.
 ## Running the checks
 
 ```bash
-pytest                  # tests
+pytest                       # tests
 pre-commit run --all-files   # black, isort, flake8, bandit, mypy
 ```
 
