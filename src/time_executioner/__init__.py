@@ -5,7 +5,7 @@ Time Executioner - A decorator and context manager for measuring execution time 
 from ._accumulator import PhaseAccumulator
 from ._core import TimeExecutioner
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["PhaseAccumulator", "TimeExecutioner", "__version__", "describe"]
 

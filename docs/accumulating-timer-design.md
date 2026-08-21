@@ -281,11 +281,14 @@ Coverage:
 
 - README section covering `accumulate()`, the unaccounted figure, counters, and
   the cross-thread caveat.
-- CHANGELOG entry under `## [Unreleased]` -> `### Added`.
+- CHANGELOG entry under `## [Unreleased]` -> `### Added`, moved under the
+  version heading at release time.
 - A line in `describe()` in `__init__.py`.
 
-`__version__` stays at `0.1.0`; the release CI bumps on tag, so bumping here is
-part of releasing rather than part of this change.
+`__version__` stays at `0.1.0` in this change; bumping it is part of releasing,
+not part of this feature. Note that the release CI does *not* bump it — it
+verifies the tag matches `__version__` and fails on a mismatch — so whoever cuts
+the release bumps it by hand first, per the Releasing section of `CONTRIBUTING.md`.
 
 ## Decisions already closed
 
