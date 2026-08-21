@@ -7,14 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Code analysis moved from SonarQube Cloud Automatic Analysis to a scan run from
-  CI, with a coverage report attached. Automatic Analysis cannot import coverage,
-  so the dashboard reported none for a suite that in fact covers 96% of the
-  package. Configuration moved from `.sonarcloud.properties` to
-  `sonar-project.properties` accordingly; the latter also supports
-  `sonar.issue.ignore.multicriteria`, so known false positives are now recorded
-  in the repository and reviewable in a diff instead of marked won't-fix in the
-  dashboard.
+## [0.2.0] - 2026-08-20
+
+### Added
 
 - **`TimeExecutioner.accumulate()`**, a companion to `time()` for code that
   times the same phase across many iterations. Inner `phases.time("fetch")`
@@ -23,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `unaccounted`, the wall clock the timed phases do not explain. The summary is
   flushed on exception too, at error level, so a run that dies still reports
   where its time went.
+
+### Changed
+
+- Code analysis moved from SonarQube Cloud Automatic Analysis to a scan run from
+  CI, with a coverage report attached. Automatic Analysis cannot import coverage,
+  so the dashboard reported none for a suite that in fact covers 96% of the
+  package. Configuration moved from `.sonarcloud.properties` to
+  `sonar-project.properties` accordingly; the latter also supports
+  `sonar.issue.ignore.multicriteria`, so known false positives are now recorded
+  in the repository and reviewable in a diff instead of marked won't-fix in the
+  dashboard.
 
 ## [0.1.0] - 2026-08-18
 
@@ -93,5 +99,6 @@ first version with a correct, installable distribution.
   removes an inert `[tool.pytest.ini_options]` block that `pytest.ini` never read.
   `DeprecationWarning` is now an error in the test suite.
 
-[Unreleased]: https://github.com/Rapid-Medical/time_executioner/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Rapid-Medical/time_executioner/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Rapid-Medical/time_executioner/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Rapid-Medical/time_executioner/releases/tag/v0.1.0
